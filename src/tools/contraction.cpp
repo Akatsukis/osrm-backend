@@ -2,6 +2,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <tbb/global_control.h>
 #include <unistd.h>
 
 #include "contractor/graph_contractor.hpp"
@@ -44,7 +45,17 @@ inline contractor::ContractorGraph makeGraph(const std::vector<Edge> &edges) {
   return contractor::ContractorGraph{max_id + 1, input_edges};
 }
 
+inline unsigned int init_num_workers() {
+  if (const auto env_p = std::getenv("TBB_NUM_THREADS")) {
+    return std::stoi(env_p);
+  } else {
+    return std::thread::hardware_concurrency();
+  }
+}
+
 int main(int argc, char *argv[]) {
+  tbb::global_control scheduler(tbb::global_control::max_allowed_parallelism,
+                                init_num_workers());
   if (argc < 2) {
     printf("Usage: %s <input_graph>\n", argv[0]);
     exit(EXIT_FAILURE);
