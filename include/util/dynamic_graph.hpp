@@ -52,6 +52,8 @@ template <typename EdgeDataT> class DynamicGraph
     using Node = detail::DynamicNode<EdgeIterator>;
     using Edge = detail::DynamicEdge<NodeIterator, EdgeDataT>;
 
+    std::vector<NodeID> rank;
+
     template <typename E> friend class DynamicGraph;
 
     class InputEdge
@@ -468,6 +470,8 @@ template <typename EdgeDataT> class DynamicGraph
 
     std::vector<Node> node_array;
     DeallocatingVector<Edge> edge_list;
+
+
 };
 } // namespace osrm::util
 

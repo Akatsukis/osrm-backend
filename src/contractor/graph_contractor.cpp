@@ -9,6 +9,7 @@
 #include "util/timing_util.hpp"
 #include "util/typedefs.hpp"
 #include "util/xor_fast_hash.hpp"
+#include "util/get_time.hpp"
 
 #include <boost/assert.hpp>
 
@@ -566,6 +567,8 @@ std::vector<bool> contractGraph(ContractorGraph &graph,
                                 std::vector<EdgeWeight> node_weights_,
                                 double core_factor)
 {
+
+    timer t;
     BOOST_ASSERT(node_weights_.size() == graph.GetNumberOfNodes());
     util::XORFastHash<> fast_hash;
 
@@ -613,8 +616,11 @@ std::vector<bool> contractGraph(ContractorGraph &graph,
         {
             node_data.priorities[node] = 0;
         }
-    }
+        }
 
+    timer t_init_priority;
+    t_init_priority.reset();
+    t_init_priority.start();
     {
         util::UnbufferedLog log;
         log << "initializing node priorities...";
@@ -633,7 +639,7 @@ std::vector<bool> contractGraph(ContractorGraph &graph,
                           });
         log << " ok.";
     }
-
+    t_init_priority.stop();
     auto number_of_core_nodes = std::max<std::size_t>(0, (1 - core_factor) * number_of_nodes);
     auto number_of_nodes_to_contract = remaining_nodes.size() - number_of_core_nodes;
     util::Log() << "preprocessing " << number_of_nodes_to_contract << " ("
@@ -645,8 +651,15 @@ std::vector<bool> contractGraph(ContractorGraph &graph,
     const util::XORFastHash<> hash;
 
     std::size_t next_renumbering = number_of_nodes * 0.35;
+    timer t_reset, t_find_is, t_contract, t_insert, t_score;
+    t_reset.reset();
+    t_find_is.reset();
+    t_contract.reset();
+    t_insert.reset();
+    t_score.reset();
     while (remaining_nodes.size() > number_of_core_nodes)
     {
+        t_reset.start();
         if (remaining_nodes.size() < next_renumbering)
         {
             RenumberData(remaining_nodes, new_to_old_node_id, node_data, graph);
@@ -654,7 +667,8 @@ std::vector<bool> contractGraph(ContractorGraph &graph,
             // only one renumbering for now
             next_renumbering = 0;
         }
-
+        t_reset.stop();
+        t_find_is.start();
         tbb::parallel_for(
             tbb::blocked_range<NodeID>(0, remaining_nodes.size(), IndependentGrainSize),
             [&](const auto &range)
@@ -677,7 +691,9 @@ std::vector<bool> contractGraph(ContractorGraph &graph,
         auto begin_independent_nodes_idx =
             std::distance(remaining_nodes.begin(), begin_independent_nodes);
         auto end_independent_nodes_idx = remaining_nodes.size();
+        t_find_is.stop();
 
+        t_contract.start();
         // contract independent nodes
         tbb::parallel_for(
             tbb::blocked_range<NodeID>(
@@ -721,6 +737,8 @@ std::vector<bool> contractGraph(ContractorGraph &graph,
                                                      data->inserted_edges.end());
                           });
 
+        t_contract.stop();
+        t_insert.start();
         // insert new edges
         for (auto &data : thread_data_list.data)
         {
@@ -746,7 +764,8 @@ std::vector<bool> contractGraph(ContractorGraph &graph,
             }
             data->inserted_edges.clear();
         }
-
+        t_insert.stop();
+        t_score.start();
         tbb::parallel_for(
             tbb::blocked_range<NodeID>(
                 begin_independent_nodes_idx, end_independent_nodes_idx, NeighboursGrainSize),
@@ -759,17 +778,31 @@ std::vector<bool> contractGraph(ContractorGraph &graph,
                     UpdateNodeNeighbours(node_data, data, graph, node);
                 }
             });
+        t_score.stop();
 
+        t_contract.start();
         // remove contracted nodes from the pool
         BOOST_ASSERT(end_independent_nodes_idx - begin_independent_nodes_idx > 0);
         number_of_contracted_nodes += end_independent_nodes_idx - begin_independent_nodes_idx;
         remaining_nodes.resize(begin_independent_nodes_idx);
 
         p.PrintStatus(number_of_contracted_nodes);
+        t_contract.stop();
     }
 
+    t_reset.start();
     node_data.Renumber(new_to_old_node_id);
     RenumberGraph(graph, new_to_old_node_id);
+    t_reset.stop();
+    t.stop();
+
+    graph.rank = new_to_old_node_id;
+
+    std::cout << t_init_priority.total_time() << "\t" << t_reset.total_time()
+              << "\t" << t_find_is.total_time() << "\t"
+              << t_contract.total_time() << "\t" << t_insert.total_time()
+              << "\t" << t_score.total_time() << "\t" << t.total_time()
+              << std::endl;
 
     return std::move(node_data.is_core);
 }

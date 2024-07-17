@@ -6,7 +6,11 @@
 #include <unistd.h>
 
 #include "contractor/graph_contractor.hpp"
+#include "engine/datafacade.hpp"
+#include "engine/datafacade/shared_memory_allocator.hpp"
 #include "engine/routing_algorithms/routing_base.hpp"
+#include "engine/routing_algorithms/routing_base_ch.hpp"
+#include "engine/search_engine_data.hpp"
 #include "util/get_time.hpp"
 using namespace osrm;
 using namespace osrm::contractor;
@@ -53,11 +57,31 @@ inline unsigned int init_num_workers() {
   }
 }
 
+std::pair<std::vector<uint32_t>, std::vector<std::pair<uint32_t, int32_t>>>
+edges2graph(std::vector<std::tuple<uint32_t, uint32_t, int32_t>> &in_edges, size_t n) {
+  std::sort(begin(in_edges), end(in_edges));
+  std::vector<uint32_t> offsets(n);
+  std::vector<std::pair<uint32_t, int32_t>> edges;
+  size_t o = 0;
+  uint32_t last_u = 0;
+  for (auto [u, v, w] : in_edges) {
+    if (u != last_u) {
+      for (uint32_t i = last_u; i < u; i++) {
+        offsets[i] = o;
+      }
+    }
+    offsets[u] = o;
+    edges.push_back(std::make_pair(v, w));
+    o++;
+  }
+  return std::make_pair(offsets, edges);
+}
+
 int main(int argc, char *argv[]) {
   tbb::global_control scheduler(tbb::global_control::max_allowed_parallelism,
                                 init_num_workers());
   if (argc < 2) {
-    printf("Usage: %s <input_graph>\n", argv[0]);
+    printf("Usage: %s <input_graph> <output_graph>\n", argv[0]);
     exit(EXIT_FAILURE);
   }
   std::string filename(argv[1]);
@@ -133,15 +157,82 @@ int main(int argc, char *argv[]) {
   ifs.close();
 
   // contraction
-  printf("Making graph\n");
   auto reference_graph = makeGraph(edges);
   auto contracted_graph = reference_graph;
   std::vector<EdgeWeight> node_weights(n, EdgeWeight{1});
-  printf("Contracting\n");
   timer t;
   contractGraph(contracted_graph, std::move(node_weights));
   t.stop();
   printf("Total time: %f\n", t.total_time());
-  printf("Done\n");
+
+  std::vector<std::tuple<uint32_t, uint32_t, int32_t>> forward;
+  std::vector<std::tuple<uint32_t, uint32_t, int32_t>> backward;
+  assert(n == contracted_graph.GetNumberOfNodes());
+  // size_t total_edges = contracted_graph.GetNumberOfEdges();
+  for (uint32_t u = 0; u < n; u++) {
+    for (auto edge : contracted_graph.GetAdjacentEdgeRange(u)) {
+      const ContractorEdgeData &data = contracted_graph.GetEdgeData(edge);
+      uint32_t v = contracted_graph.GetTarget(edge);
+      int32_t w = from_alias<int32_t>(data.weight);
+      if (data.forward) {
+        forward.push_back(std::make_tuple(u, v, w));
+      } else {
+        assert(data.backward);
+        backward.push_back(std::make_tuple(u, v, w));
+      }
+    }
+  }
+  std::cerr<<"0\n";
+  auto [forward_offsets, forward_edges] = edges2graph(forward, n);
+  auto [backward_offsets, backward_edges] = edges2graph(backward, n);
+  std::cerr<<"0\n";
+
+  std::string output_file(argv[2]);
+  std::ofstream ofs(output_file);
+  size_t aaam = forward.size(), aaarm = backward.size();
+  // assert(total_edges == aaam + aaarm);
+  size_t layerOffset = 0, ccOffset = 0;
+  ofs << "header\n";
+  ofs << n << '\n' << aaam << '\n' << aaarm << '\n';
+  ofs << layerOffset << '\n' << ccOffset << '\n';
+  std::cerr<<"1\n";
+  for (size_t i = 0; i < n; i++) {
+    ofs << forward_offsets[i] << '\n';
+  }
+  std::cerr<<"2\n";
+  for (size_t i = 0; i < n; i++) {
+    ofs << contracted_graph.rank[i] << '\n';
+  }
+  std::cerr<<"3\n";
+  for (size_t i = 0; i < aaam; i++) {
+    ofs << forward_edges[i].first << '\n';
+  }
+  std::cerr<<"4\n";
+  for (size_t i = 0; i < aaam; i++) {
+    ofs << forward_edges[i].second << '\n';
+  }
+  std::cerr<<"5\n";
+  for (size_t i = 0; i < n; i++) {
+    ofs << backward_offsets[i] << '\n';
+  }
+  std::cerr<<"6\n";
+  for (size_t i = 0; i < aaarm; i++) {
+    ofs << backward_edges[i].first << '\n';
+  }
+  std::cerr<<"7\n";
+  for (size_t i = 0; i < aaarm; i++) {
+    ofs << backward_edges[i].second << '\n';
+  }
+  std::cerr<<"8\n";
+  ofs.close();
+
+  // using Algorithm = osrm::engine::routing_algorithms::ch::Algorithm;
+  // using Facade =
+  // osrm::engine::datafacade::ContiguousInternalMemoryDataFacade<Algorithm>;
+  // osrm::engine::SearchEngineData<Algorithm> heaps;
+  // std::string metric_name;
+  // auto facade =
+  // Facade(std::make_shared<osrm::engine::datafacade::SharedMemoryAllocator>(),
+  // metric_name, 0);
   return 0;
 }
