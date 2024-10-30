@@ -16,6 +16,7 @@
 #include "contractor/contractor_search.hpp"
 #include "contractor/query_edge.hpp"
 #include "util/deallocating_vector.hpp"
+#include "util/get_time.hpp"
 #include "util/integer_range.hpp"
 #include "util/log.hpp"
 #include "util/percent.hpp"
@@ -569,8 +570,10 @@ std::vector<bool> contractGraph(ContractorGraph &graph,
 
   const util::XORFastHash<> hash;
 
-  std::size_t next_renumbering = number_of_nodes * 0.35;
+  std::size_t next_renumbering = number_of_nodes * 0;
+  int round = 0;
   while (remaining_nodes.size() > number_of_core_nodes) {
+    timer tm;
     if (remaining_nodes.size() < next_renumbering) {
       RenumberData(remaining_nodes, new_to_old_node_id, node_data, graph);
       log << "[renumbered]";
@@ -681,6 +684,9 @@ std::vector<bool> contractGraph(ContractorGraph &graph,
     remaining_nodes.resize(begin_independent_nodes_idx);
 
     p.PrintStatus(number_of_contracted_nodes);
+
+    printf("Round %d: time: %f, remaining_nodes.size: %zu\n", round++,
+           tm.total_time(), remaining_nodes.size());
   }
 
   node_data.Renumber(new_to_old_node_id);

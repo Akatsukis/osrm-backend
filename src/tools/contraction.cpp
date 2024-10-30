@@ -38,11 +38,11 @@ inline contractor::ContractorGraph makeGraph(const std::vector<Edge>& edges) {
     input_edges.push_back(contractor::ContractorEdge{
         start, target,
         contractor::ContractorEdgeData{
-            {weight}, {duration}, {distance}, 1, ++id, false, true, false}});
+            {weight}, {duration}, {distance}, 1, id++, false, true, false}});
     input_edges.push_back(contractor::ContractorEdge{
         target, start,
         contractor::ContractorEdgeData{
-            {weight}, {duration}, {distance}, 1, ++id, false, false, true}});
+            {weight}, {duration}, {distance}, 1, id++, false, false, true}});
   }
   std::sort(input_edges.begin(), input_edges.end());
   // for (auto edge : input_edges) {
@@ -70,7 +70,6 @@ edges2graph(std::vector<std::tuple<uint32_t, uint32_t, int32_t>>& in_edges,
   std::vector<std::pair<uint32_t, int32_t>> edges;
   uint32_t last_u = 0;
   for (auto [u, v, w] : in_edges) {
-    // printf("(%u,%u,%d)\n", u, v, w);
     if (u != last_u) {
       for (uint32_t i = last_u + 1; i <= u; i++) {
         offsets[i] = edges.size();
