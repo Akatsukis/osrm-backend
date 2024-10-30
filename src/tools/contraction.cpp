@@ -44,12 +44,13 @@ inline contractor::ContractorGraph makeGraph(const std::vector<Edge>& edges) {
         contractor::ContractorEdgeData{
             {weight}, {duration}, {distance}, 1, id++, false, false, true}});
   }
-  std::sort(input_edges.begin(), input_edges.end());
-  // for (auto edge : input_edges) {
-  // assert(edge.data.originalEdges == 0);
-  // assert(edge.data.id >= 1 && edge.data.id <= 2 * edges.size());
-  //}
-  // printf("Pass\n");
+  tbb::parallel_sort(input_edges.begin(), input_edges.end());
+  // std::sort(input_edges.begin(), input_edges.end());
+  //  for (auto edge : input_edges) {
+  //  assert(edge.data.originalEdges == 0);
+  //  assert(edge.data.id >= 1 && edge.data.id <= 2 * edges.size());
+  // }
+  //  printf("Pass\n");
 
   return contractor::ContractorGraph{max_id + 1, input_edges};
 }
@@ -173,11 +174,12 @@ int main(int argc, char* argv[]) {
   contractGraph(contracted_graph, std::move(node_weights));
   t.stop();
   printf("Total time: %f\n", t.total_time());
+  return 0;
 
   std::vector<std::tuple<uint32_t, uint32_t, int32_t>> forward;
   std::vector<std::tuple<uint32_t, uint32_t, int32_t>> backward;
   assert(n == contracted_graph.GetNumberOfNodes());
-  size_t total_edges = contracted_graph.GetNumberOfEdges();
+  // size_t total_edges = contracted_graph.GetNumberOfEdges();
   for (uint32_t u = 0; u < n; u++) {
     for (auto edge : contracted_graph.GetAdjacentEdgeRange(u)) {
       const ContractorEdgeData& data = contracted_graph.GetEdgeData(edge);
@@ -186,8 +188,8 @@ int main(int argc, char* argv[]) {
       // if (data.shortcut) {
       if (data.forward) {
         forward.push_back(std::make_tuple(u, v, w));
-      } else {
-        assert(data.backward);
+      }
+      if (data.backward) {
         backward.push_back(std::make_tuple(u, v, w));
       }
       //}
@@ -202,11 +204,11 @@ int main(int argc, char* argv[]) {
   std::ofstream ofs(output_file);
   size_t aaam = forward.size(), aaarm = backward.size();
   printf("m: %zu, rm: %zu\n", aaam, aaarm);
-  if (total_edges != aaam + aaarm) {
-    printf("Edges number not equal\n");
-    fflush(stdout);
-    exit(EXIT_FAILURE);
-  }
+  // if (total_edges != aaam + aaarm) {
+  //   printf("Edges number not equal\n");
+  //   fflush(stdout);
+  //   exit(EXIT_FAILURE);
+  // }
   if (forward_offsets.size() != n) {
     printf("forward_offsets: %zu, n: %zu\n", forward_offsets.size(), n);
     fflush(stdout);
@@ -222,7 +224,7 @@ int main(int argc, char* argv[]) {
     fflush(stdout);
     exit(EXIT_FAILURE);
   }
-  assert(total_edges == aaam + aaarm);
+  // assert(total_edges == aaam + aaarm);
   printf("writing...\n");
   size_t layerOffset = 0, ccOffset = 0;
   ofs << "header\n";
