@@ -38,11 +38,11 @@ inline contractor::ContractorGraph makeGraph(const std::vector<Edge>& edges) {
     input_edges.push_back(contractor::ContractorEdge{
         start, target,
         contractor::ContractorEdgeData{
-            {weight}, {duration}, {distance}, 0, ++id, false, true, false}});
+            {weight}, {duration}, {distance}, 1, ++id, false, true, false}});
     input_edges.push_back(contractor::ContractorEdge{
         target, start,
         contractor::ContractorEdgeData{
-            {weight}, {duration}, {distance}, 0, ++id, false, false, true}});
+            {weight}, {duration}, {distance}, 1, ++id, false, false, true}});
   }
   std::sort(input_edges.begin(), input_edges.end());
   // for (auto edge : input_edges) {
