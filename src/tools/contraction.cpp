@@ -38,20 +38,14 @@ inline contractor::ContractorGraph makeGraph(const std::vector<Edge>& edges) {
     input_edges.push_back(contractor::ContractorEdge{
         start, target,
         contractor::ContractorEdgeData{
-            {weight}, {duration}, {distance}, 1, id++, false, true, false}});
+            {weight}, {duration}, {distance}, 1, id, false, true, false}});
     input_edges.push_back(contractor::ContractorEdge{
         target, start,
         contractor::ContractorEdgeData{
-            {weight}, {duration}, {distance}, 1, id++, false, false, true}});
+            {weight}, {duration}, {distance}, 1, id, false, false, true}});
+    id++;
   }
   tbb::parallel_sort(input_edges.begin(), input_edges.end());
-  // std::sort(input_edges.begin(), input_edges.end());
-  //  for (auto edge : input_edges) {
-  //  assert(edge.data.originalEdges == 0);
-  //  assert(edge.data.id >= 1 && edge.data.id <= 2 * edges.size());
-  // }
-  //  printf("Pass\n");
-
   return contractor::ContractorGraph{max_id + 1, input_edges};
 }
 
@@ -166,10 +160,10 @@ int main(int argc, char* argv[]) {
   ifs.close();
 
   // contraction
-  printf("n: %zu, m:%zu\n", n, m);
+  printf("n: %zu, m: %zu\n", n, m);
   auto reference_graph = makeGraph(edges);
   auto contracted_graph = reference_graph;
-  std::vector<EdgeWeight> node_weights(n, EdgeWeight{1});
+  std::vector<EdgeWeight> node_weights(n, EdgeWeight{0});
   timer t;
   contractGraph(contracted_graph, std::move(node_weights));
   t.stop();
@@ -185,46 +179,21 @@ int main(int argc, char* argv[]) {
       const ContractorEdgeData& data = contracted_graph.GetEdgeData(edge);
       uint32_t v = contracted_graph.GetTarget(edge);
       int32_t w = from_alias<int32_t>(data.weight);
-      // if (data.shortcut) {
       if (data.forward) {
         forward.push_back(std::make_tuple(u, v, w));
       }
       if (data.backward) {
         backward.push_back(std::make_tuple(u, v, w));
       }
-      //}
     }
   }
-  // printf("forward\n");
   auto [forward_offsets, forward_edges] = edges2graph(forward, n);
-  // printf("backward\n");
   auto [backward_offsets, backward_edges] = edges2graph(backward, n);
 
   std::string output_file(argv[2]);
   std::ofstream ofs(output_file);
   size_t aaam = forward.size(), aaarm = backward.size();
-  printf("m: %zu, rm: %zu\n", aaam, aaarm);
-  // if (total_edges != aaam + aaarm) {
-  //   printf("Edges number not equal\n");
-  //   fflush(stdout);
-  //   exit(EXIT_FAILURE);
-  // }
-  if (forward_offsets.size() != n) {
-    printf("forward_offsets: %zu, n: %zu\n", forward_offsets.size(), n);
-    fflush(stdout);
-    exit(EXIT_FAILURE);
-  }
-  if (backward_offsets.size() != n) {
-    printf("backward_offsets: %zu, n: %zu\n", backward_offsets.size(), n);
-    fflush(stdout);
-    exit(EXIT_FAILURE);
-  }
-  if (contracted_graph.rank.size() != n) {
-    printf("rank: %zu, n: %zu\n", contracted_graph.rank.size(), n);
-    fflush(stdout);
-    exit(EXIT_FAILURE);
-  }
-  // assert(total_edges == aaam + aaarm);
+  printf("upward_m: %zu, downward_m: %zu\n", aaam, aaarm);
   printf("writing...\n");
   size_t layerOffset = 0, ccOffset = 0;
   ofs << "header\n";
@@ -252,14 +221,5 @@ int main(int argc, char* argv[]) {
     ofs << backward_edges[i].second << '\n';
   }
   ofs.close();
-
-  // using Algorithm = osrm::engine::routing_algorithms::ch::Algorithm;
-  // using Facade =
-  // osrm::engine::datafacade::ContiguousInternalMemoryDataFacade<Algorithm>;
-  // osrm::engine::SearchEngineData<Algorithm> heaps;
-  // std::string metric_name;
-  // auto facade =
-  // Facade(std::make_shared<osrm::engine::datafacade::SharedMemoryAllocator>(),
-  // metric_name, 0);
   return 0;
 }
